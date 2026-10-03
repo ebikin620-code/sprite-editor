@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TurboWarp & Scratch スプライト背景透過ツール</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome CDN for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        scratch: {
+                            orange: '#FFAB19',
+                            blue: '#4C97FF',
+                            purple: '#9966FF',
+                            dark: '#1E1E2E',
+                            card: '#2B2B3D'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Transparency Checkerboard Pattern */
+        .checkerboard {
+            background-color: #2a2a2a;
+            background-image: 
+                linear-gradient(45deg, #383838 25%, transparent 25%), 
+                linear-gradient(-45deg, #383838 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #383838 75%), 
+                linear-gradient(-45deg, transparent 75%, #383838 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        /* Light mode checkerboard variation when toggled */
+        .checkerboard-light {
+            background-color: #ffffff;
+            background-image: 
+                linear-gradient(45deg, #e5e5e5 25%, transparent 25%), 
+                linear-gradient(-45deg, #e5e5e5 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #e5e5e5 75%), 
+                linear-gradient(-45deg, transparent 75%, #e5e5e5 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        /* Hide native scrollbars for clean full-screen feel */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e1e2e;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b4b66;
+            border-radius: 3px;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            touch-action: none; /* Let JavaScript handle touch gestures */
+        }
+    </style>
+</head>
+<body class="bg-scratch-dark text-slate-100 h-screen w-screen overflow-hidden flex flex-col">
+
+    <!-- Header Navbar -->
+    <header class="bg-scratch-card border-b border-slate-700/60 px-4 py-2.5 flex items-center justify-between z-20 shrink-0">
+        <div class="flex items-center gap-2">
+            <div class="bg-gradient-to-tr from-scratch-orange to-amber-400 text-slate-900 w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">
+                <i class="fa-solid font-black">TW</i>
+            </div>
+            <div>
+                <h1 class="text-base font-bold leading-tight flex items-center gap-1.5">
+                    Sprite Transparentizer
+                    <span class="text-[10px] bg-scratch-purple/40 text-purple-200 px-1.5 py-0.5 rounded border border-purple-400/30">TurboWarp</span>
+                </h1>
+                <p class="text-[11px] text-slate-400">スプライト背景透過・自動トリミングツール</p>
+            </div>
+        </div>
+
+        <!-- Action Header Buttons -->
+        <div class="flex items-center gap-2">
+            <label for="imageLoader" class="bg-scratch-blue hover:bg-blue-600 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow">
+                <i class="fa-solid fa-folder-open"></i>
+                <span class="hidden sm:inline">画像を開く</span>
+            </label>
+            <input type="file" id="imageLoader" accept="image/*" class="hidden">
+
+            <button id="exportBtn" class="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:pointer-events-none active:scale-95 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-lg shadow-emerald-900/30" disabled>
+                <i class="fa-solid fa-download"></i>
+                <span>書き出し</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Workspace -->
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+
+        <!-- Canvas Container Area -->
+        <div id="canvasViewport" class="flex-1 relative overflow-hidden checkerboard flex items-center justify-center select-none cursor-crosshair">
+            
+            <!-- Default Welcome Screen / Dropzone -->
+            <div id="uploadPrompt" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 bg-scratch-dark/80 backdrop-blur-sm transition-opacity">
+                <div class="max-w-md w-full p-8 border-2 border-dashed border-slate-600 rounded-3xl bg-scratch-card/80 flex flex-col items-center shadow-2xl">
+                    <div class="w-16 h-16 bg-scratch-blue/20 text-scratch-blue rounded-2xl flex items-center justify-center text-3xl mb-4">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </div>
+                    <h2 class="text-xl font-bold mb-2">画像を読み込んで背景を透明化</h2>
+                    <p class="text-xs text-slate-300 mb-6 leading-relaxed">
+                        PNG, JPG, SVG, WebP に対応。<br>
+                        TurboWarp / Scratchのゲーム制作に最適化された透明PNGスプライトを作成します。
+                    </p>
+                    
+                    <label for="imageLoaderDrop" class="w-full bg-gradient-to-r from-scratch-blue to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white py-3 px-6 rounded-xl font-bold text-sm shadow-lg cursor-pointer transition active:scale-95 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-cloud-arrow-up text-lg"></i>
+                        画像を選択 / ドロップ
+                    </label>
+                    <input type="file" id="imageLoaderDrop" accept="image/*" class="hidden">
+                    
+                    <div class="mt-4 flex items-center gap-3 text-[11px] text-slate-400">
+                        <span><i class="fa-solid fa-check text-emerald-400 mr-1"></i>ワンタップ透明化</span>
+                        <span><i class="fa-solid fa-check text-emerald-400 mr-1"></i>自動トリミング</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Drawing/Interactive Canvas -->
+            <canvas id="mainCanvas" class="max-w-none max-h-none shadow-2xl transition-transform duration-75"></canvas>
+
+            <!-- Touch / Zoom Helper Overlay Controls -->
+            <div id="canvasControls" class="absolute top-3 right-3 flex flex-col gap-2 z-10 hidden">
+                <button id="zoomInBtn" class="w-10 h-10 bg-scratch-card/90 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-xl shadow-lg border border-slate-600 flex items-center justify-center">
+                    <i class="fa-solid fa-plus text-sm"></i>
+                </button>
+                <button id="zoomOutBtn" class="w-10 h-10 bg-scratch-card/90 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-xl shadow-lg border border-slate-600 flex items-center justify-center">
+                    <i class="fa-solid fa-minus text-sm"></i>
+                </button>
+                <button id="resetViewBtn" class="w-10 h-10 bg-scratch-card/90 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-xl shadow-lg border border-slate-600 flex items-center justify-center text-xs font-bold">
+                    1:1
+                </button>
+                <button id="toggleBgBtn" title="背景切替" class="w-10 h-10 bg-scratch-card/90 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-xl shadow-lg border border-slate-600 flex items-center justify-center">
+                    <i class="fa-solid fa-circle-half-stroke text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Cursor Brush Indicator Circle for Eraser/Brush -->
+            <div id="brushCursor" class="fixed pointer-events-none border border-white bg-red-500/30 rounded-full -translate-x-1/2 -translate-y-1/2 hidden z-30"></div>
+        </div>
+
+        <!-- Controls Sidebar / Mobile Bottom Toolbar -->
+        <aside id="toolbar" class="w-full md:w-80 bg-scratch-card border-t md:border-t-0 md:border-l border-slate-700/60 flex flex-col z-20 shrink-0 max-h-[50vh] md:max-h-none overflow-y-auto">
+            
+            <!-- Tool Selection Tab Bar -->
+            <div class="p-3 border-b border-slate-700/60 bg-slate-900/40">
+                <p class="text-[11px] font-semibold text-slate-400 mb-2 uppercase tracking-wider">ツール選択</p>
+                <div class="grid grid-cols-4 gap-1.5 bg-slate-900/80 p-1 rounded-xl border border-slate-700/60">
+                    <button id="toolWand" class="tool-btn active flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition text-scratch-blue bg-scratch-blue/20 border border-scratch-blue/40">
+                        <i class="fa-solid fa-wand-magic-sparkles text-base mb-1"></i>
+                        <span>自動選択</span>
+                    </button>
+                    <button id="toolEraser" class="tool-btn flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition">
+                        <i class="fa-solid fa-eraser text-base mb-1"></i>
+                        <span>消しゴム</span>
+                    </button>
+                    <button id="toolRestore" class="tool-btn flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition">
+                        <i class="fa-solid fa-rotate-left text-base mb-1"></i>
+                        <span>復元</span>
+                    </button>
+                    <button id="toolPan" class="tool-btn flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition">
+                        <i class="fa-solid fa-hand text-base mb-1"></i>
+                        <span>移動</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dynamic Tool Options Area -->
+            <div class="p-4 space-y-4 flex-1">
+
+                <!-- Wand Options -->
+                <div id="wandOptions" class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold text-slate-200">許容値 (カラー感度)</label>
+                        <span id="toleranceVal" class="text-xs font-mono font-bold bg-slate-800 px-2 py-0.5 rounded text-scratch-blue">30</span>
+                    </div>
+                    <input id="toleranceSlider" type="range" min="1" max="150" value="30" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-scratch-blue">
+                    <p class="text-[11px] text-slate-400 leading-relaxed">
+                        タップした色と同系統の色を全自動で透明化します。値が大きいほど広範囲を消去します。
+                    </p>
+
+                    <div class="pt-2">
+                        <button id="autoCleanBgBtn" class="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-600/80 text-amber-300 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow">
+                            <i class="fa-solid fa-bolt text-amber-400"></i>
+                            一括背景自動透過 (四角枠色判定)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Eraser & Restore Options -->
+                <div id="brushOptions" class="space-y-3 hidden">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold text-slate-200">ブラシサイズ</label>
+                        <span id="brushSizeVal" class="text-xs font-mono font-bold bg-slate-800 px-2 py-0.5 rounded text-scratch-blue">25px</span>
+                    </div>
+                    <input id="brushSizeSlider" type="range" min="2" max="120" value="25" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-scratch-blue">
+
+                    <div class="flex justify-between items-center pt-1">
+                        <label class="text-xs font-bold text-slate-200">ぼかし度 (Softness)</label>
+                        <span id="brushSoftnessVal" class="text-xs font-mono font-bold bg-slate-800 px-2 py-0.5 rounded text-scratch-blue">0%</span>
+                    </div>
+                    <input id="brushSoftnessSlider" type="range" min="0" max="100" value="0" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-scratch-blue">
+                </div>
+
+                <!-- TurboWarp & Scratch Optimization Section -->
+                <div class="pt-3 border-t border-slate-700/60 space-y-2">
+                    <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Scratch / TurboWarp 最適化</p>
+
+                    <button id="cropBoundsBtn" class="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-between border border-slate-600/60 transition">
+                        <span class="flex items-center gap-2">
+                            <i class="fa-solid fa-crop-simple text-scratch-orange"></i>
+                            余白を自動トリミング (Crop)
+                        </span>
+                        <i class="fa-solid fa-chevron-right text-slate-500 text-[10px]"></i>
+                    </button>
+                    <p class="text-[10px] text-slate-400 pl-1">
+                        透明な余白をカットして、スプライトの回転軸・中心位置を調整しやすくします。
+                    </p>
+                </div>
+
+                <!-- Undo / Redo & History -->
+                <div class="pt-3 border-t border-slate-700/60 flex gap-2">
+                    <button id="undoBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 active:scale-95 text-slate-200 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition" disabled>
+                        <i class="fa-solid fa-rotate-left"></i>
+                        元に戻す
+                    </button>
+                    <button id="redoBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 active:scale-95 text-slate-200 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition" disabled>
+                        <i class="fa-solid fa-rotate-right"></i>
+                        やり直し
+                    </button>
+                </div>
+
+            </div>
+        </aside>
+    </main>
+
+    <!-- Export Modal Dialog -->
+    <div id="exportModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-scratch-card w-full max-w-sm rounded-2xl border border-slate-700 p-5 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                <h3 class="font-bold text-base flex items-center gap-2">
+                    <i class="fa-solid fa-file-export text-emerald-400"></i>
+                    スプライト書き出し
+                </h3>
+                <button id="closeModalBtn" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Preview Image Thumbnail -->
+            <div class="checkerboard p-3 rounded-xl border border-slate-700 flex items-center justify-center max-h-40 overflow-hidden">
+                <img id="exportPreviewImg" class="max-h-36 max-w-full object-contain">
+            </div>
+
+            <!-- Resize Options -->
+            <div class="space-y-2">
+                <label class="text-xs font-bold text-slate-300">サイズプリセット (Scratch解像度)</label>
+                <select id="exportSizePreset" class="w-full bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-scratch-blue">
+                    <option value="original">オリジナルサイズを維持</option>
+                    <option value="480">Scratch 画面サイズにフィット (最大 480px)</option>
+                    <option value="240">ハーフサイズ (最大 240px)</option>
+                    <option value="128">アイコンサイズ (128x128以内)</option>
+                </select>
+            </div>
+
+            <!-- Size Info Display -->
+            <div class="text-[11px] text-slate-400 flex justify-between px-1">
+                <span>現在のサイズ:</span>
+                <span id="exportDimensions" class="font-mono font-bold text-slate-200">0 x 0 px</span>
+            </div>
+
+            <!-- Download Button -->
+            <button id="confirmDownloadBtn" class="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold py-3 rounded-xl text-sm shadow-lg shadow-emerald-900/40 transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-download"></i>
+                PNG形式で保存 (透明維持)
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Main Application State
+        const state = {
+            imageLoaded: false,
+            currentTool: 'wand', // 'wand', 'eraser', 'restore', 'pan'
+            tolerance: 30,
+            brushSize: 25,
+            brushSoftness: 0,
+            zoom: 1,
+            panX: 0,
+            panY: 0,
+            isDragging: false,
+            dragStartX: 0,
+            dragStartY: 0,
+            history: [],
+            historyIndex: -1,
+            maxHistory: 15,
+            originalImage: null,
+            originalImageData: null
+        };
+
+        // DOM Element References
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const viewport = document.getElementById('canvasViewport');
+        const uploadPrompt = document.getElementById('uploadPrompt');
+        const imageLoader = document.getElementById('imageLoader');
+        const imageLoaderDrop = document.getElementById('imageLoaderDrop');
+        const canvasControls = document.getElementById('canvasControls');
+        const brushCursor = document.getElementById('brushCursor');
+
+        // Tool buttons
+        const toolWand = document.getElementById('toolWand');
+        const toolEraser = document.getElementById('toolEraser');
+        const toolRestore = document.getElementById('toolRestore');
+        const toolPan = document.getElementById('toolPan');
+
+        // Panels
+        const wandOptions = document.getElementById('wandOptions');
+        const brushOptions = document.getElementById('brushOptions');
+
+        // Controls Inputs
+        const toleranceSlider = document.getElementById('toleranceSlider');
+        const toleranceVal = document.getElementById('toleranceVal');
+        const brushSizeSlider = document.getElementById('brushSizeSlider');
+        const brushSizeVal = document.getElementById('brushSizeVal');
+        const brushSoftnessSlider = document.getElementById('brushSoftnessSlider');
+        const brushSoftnessVal = document.getElementById('brushSoftnessVal');
+
+        // Undo/Redo & Crop Buttons
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        const autoCleanBgBtn = document.getElementById('autoCleanBgBtn');
+        const cropBoundsBtn = document.getElementById('cropBoundsBtn');
+        const exportBtn = document.getElementById('exportBtn');
+
+        // Zoom Controls
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const resetViewBtn = document.getElementById('resetViewBtn');
+        const toggleBgBtn = document.getElementById('toggleBgBtn');
+
+        // Modal Elements
+        const exportModal = document.getElementById('exportModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const exportPreviewImg = document.getElementById('exportPreviewImg');
+        const exportDimensions = document.getElementById('exportDimensions');
+        const exportSizePreset = document.getElementById('exportSizePreset');
+        const confirmDownloadBtn = document.getElementById('confirmDownloadBtn');
+
+        // Handle file uploads
+        [imageLoader, imageLoaderDrop].forEach(input => {
+            input.addEventListener('change', handleImageUpload);
+        });
+
+        // Drag and drop setup
+        viewport.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        viewport.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                loadImageFromFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        function handleImageUpload(e) {
+            if (e.target.files && e.target.files[0]) {
+                loadImageFromFile(e.target.files[0]);
+            }
+        }
+
+        function loadImageFromFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    initCanvasWithImage(img);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Initialize Canvas with user uploaded Image
+        function initCanvasWithImage(img) {
+            state.originalImage = img;
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            // Draw original image
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            // Store clean original image data for restore tool
+            state.originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            state.imageLoaded = true;
+            uploadPrompt.classList.add('hidden');
+            canvasControls.classList.remove('hidden');
+            exportBtn.disabled = false;
+
+            // Reset Zoom and Transform
+            resetZoom();
+
+            // Clear history and save initial state
+            state.history = [];
+            state.historyIndex = -1;
+            saveHistory();
+        }
+
+        // Save History State for Undo/Redo
+        function saveHistory() {
+            if (!state.imageLoaded) return;
+            
+            // Truncate redo states if new action occurs
+            if (state.historyIndex < state.history.length - 1) {
+                state.history = state.history.slice(0, state.historyIndex + 1);
+            }
+
+            // Save canvas image data
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            state.history.push(imgData);
+
+            if (state.history.length > state.maxHistory) {
+                state.history.shift();
+            } else {
+                state.historyIndex++;
+            }
+
+            updateUndoRedoUI();
+        }
+
+        function updateUndoRedoUI() {
+            undoBtn.disabled = state.historyIndex <= 0;
+            redoBtn.disabled = state.historyIndex >= state.history.length - 1;
+        }
+
+        undoBtn.addEventListener('click', () => {
+            if (state.historyIndex > 0) {
+                state.historyIndex--;
+                const imgData = state.history[state.historyIndex];
+                canvas.width = imgData.width;
+                canvas.height = imgData.height;
+                ctx.putImageData(imgData, 0, 0);
+                updateUndoRedoUI();
+            }
+        });
+
+        redoBtn.addEventListener('click', () => {
+            if (state.historyIndex < state.history.length - 1) {
+                state.historyIndex++;
+                const imgData = state.history[state.historyIndex];
+                canvas.width = imgData.width;
+                canvas.height = imgData.height;
+                ctx.putImageData(imgData, 0, 0);
+                updateUndoRedoUI();
+            }
+        });
+
+        // Tool Switching
+        const tools = [
+            { btn: toolWand, name: 'wand', options: wandOptions },
+            { btn: toolEraser, name: 'eraser', options: brushOptions },
+            { btn: toolRestore, name: 'restore', options: brushOptions },
+            { btn: toolPan, name: 'pan', options: null }
+        ];
+
+        tools.forEach(tool => {
+            tool.btn.addEventListener('click', () => {
+                tools.forEach(t => {
+                    t.btn.classList.remove('active', 'bg-scratch-blue/20', 'border', 'border-scratch-blue/40', 'text-scratch-blue');
+                    t.btn.classList.add('text-slate-400');
+                    if (t.options) t.options.classList.add('hidden');
+                });
+
+                tool.btn.classList.add('active', 'bg-scratch-blue/20', 'border', 'border-scratch-blue/40', 'text-scratch-blue');
+                tool.btn.classList.remove('text-slate-400');
+                if (tool.options) tool.options.classList.remove('hidden');
+
+                state.currentTool = tool.name;
+                updateCursor();
+            });
+        });
+
+        // Sliders input events
+        toleranceSlider.addEventListener('input', (e) => {
+            state.tolerance = parseInt(e.target.value);
+            toleranceVal.textContent = state.tolerance;
+        });
+
+        brushSizeSlider.addEventListener('input', (e) => {
+            state.brushSize = parseInt(e.target.value);
+            brushSizeVal.textContent = `${state.brushSize}px`;
+            updateCursor();
+        });
+
+        brushSoftnessSlider.addEventListener('input', (e) => {
+            state.brushSoftness = parseInt(e.target.value);
+            brushSoftnessVal.textContent = `${state.brushSoftness}%`;
+        });
+
+        // Toggle background mode
+        toggleBgBtn.addEventListener('click', () => {
+            viewport.classList.toggle('checkerboard-light');
+        });
+
+        function resetZoom() {
+            if (!state.imageLoaded) return;
+            const viewportRect = viewport.getBoundingClientRect();
+            const scaleX = (viewportRect.width - 40) / canvas.width;
+            const scaleY = (viewportRect.height - 40) / canvas.height;
+            state.zoom = Math.min(scaleX, scaleY, 1);
+            state.panX = 0;
+            state.panY = 0;
+            applyTransform();
+        }
+
+        function applyTransform() {
+            canvas.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+        }
+
+        zoomInBtn.addEventListener('click', () => {
+            state.zoom = Math.min(state.zoom * 1.2, 8);
+            applyTransform();
+        });
+
+        zoomOutBtn.addEventListener('click', () => {
+            state.zoom = Math.max(state.zoom / 1.2, 0.1);
+            applyTransform();
+        });
+
+        resetViewBtn.addEventListener('click', resetZoom);
+
+        // Wheel zoom
+        viewport.addEventListener('wheel', (e) => {
+            if (!state.imageLoaded) return;
+            e.preventDefault();
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+            state.zoom = Math.max(0.1, Math.min(8, state.zoom * zoomFactor));
+            applyTransform();
+        }, { passive: false });
+
+        function getCanvasCoordinates(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            // Compute actual pixel inside canvas
+            const x = Math.floor((clientX - rect.left) * (canvas.width / rect.width));
+            const y = Math.floor((clientY - rect.top) * (canvas.height / rect.height));
+
+            return { x, y, clientX, clientY };
+        }
+
+        function updateCursor(e) {
+            if (!state.imageLoaded || (state.currentTool !== 'eraser' && state.currentTool !== 'restore')) {
+                brushCursor.classList.add('hidden');
+                return;
+            }
+
+            if (e) {
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                
+                // Scale cursor visual diameter according to canvas zoom
+                const displayRadius = (state.brushSize / 2) * (canvas.getBoundingClientRect().width / canvas.width);
+                
+                brushCursor.style.width = `${displayRadius * 2}px`;
+                brushCursor.style.height = `${displayRadius * 2}px`;
+                brushCursor.style.left = `${clientX}px`;
+                brushCursor.style.top = `${clientY}px`;
+                brushCursor.classList.remove('hidden');
+            }
+        }
+
+        let isDrawing = false;
+
+        function handlePointerDown(e) {
+            if (!state.imageLoaded) return;
+
+            const coords = getCanvasCoordinates(e);
+
+            if (state.currentTool === 'pan' || e.button === 1 || e.spaceKey) {
+                state.isDragging = true;
+                state.dragStartX = coords.clientX - state.panX;
+                state.dragStartY = coords.clientY - state.panY;
+                viewport.style.cursor = 'grabbing';
+                return;
+            }
+
+            if (coords.x < 0 || coords.x >= canvas.width || coords.y < 0 || coords.y >= canvas.height) {
+                return;
+            }
+
+            if (state.currentTool === 'wand') {
+                performFloodFillRemove(coords.x, coords.y);
+                saveHistory();
+            } else if (state.currentTool === 'eraser' || state.currentTool === 'restore') {
+                isDrawing = true;
+                performBrushStroke(coords.x, coords.y);
+            }
+        }
+
+        function handlePointerMove(e) {
+            updateCursor(e);
+
+            if (state.isDragging) {
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                state.panX = clientX - state.dragStartX;
+                state.panY = clientY - state.dragStartY;
+                applyTransform();
+                return;
+            }
+
+            if (isDrawing && (state.currentTool === 'eraser' || state.currentTool === 'restore')) {
+                const coords = getCanvasCoordinates(e);
+                performBrushStroke(coords.x, coords.y);
+            }
+        }
+
+        function handlePointerUp() {
+            if (state.isDragging) {
+                state.isDragging = false;
+                viewport.style.cursor = 'crosshair';
+            }
+
+            if (isDrawing) {
+                isDrawing = false;
+                saveHistory();
+            }
+        }
+
+        // Attach Mouse & Touch listeners
+        viewport.addEventListener('mousedown', handlePointerDown);
+        window.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+
+        viewport.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                handlePointerDown(e);
+            }
+        }, { passive: true });
+
+        viewport.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1) {
+                handlePointerMove(e);
+            }
+        }, { passive: true });
+
+        viewport.addEventListener('touchend', handlePointerUp);
+
+        viewport.addEventListener('mouseleave', () => {
+            brushCursor.classList.add('hidden');
+        });
+
+        function performFloodFillRemove(startX, startY) {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+            const width = canvas.width;
+            const height = canvas.height;
+
+            const targetIdx = (startY * width + startX) * 4;
+            const targetR = data[targetIdx];
+            const targetG = data[targetIdx + 1];
+            const targetB = data[targetIdx + 2];
+            const targetA = data[targetIdx + 3];
+
+            // If already completely transparent, skip
+            if (targetA === 0) return;
+
+            const tolerance = state.tolerance;
+            const visited = new Uint8Array(width * height);
+            const queue = [startX, startY];
+
+            // Color matching calculation
+            function colorMatch(idx) {
+                const r = data[idx];
+                const g = data[idx + 1];
+                const b = data[idx + 2];
+                const a = data[idx + 3];
+
+                if (a === 0) return false;
+
+                const diff = Math.sqrt(
+                    (r - targetR) ** 2 +
+                    (g - targetG) ** 2 +
+                    (b - targetB) ** 2 +
+                    (a - targetA) ** 2
+                );
+
+                return diff <= tolerance;
+            }
+
+            while (queue.length > 0) {
+                const y = queue.pop();
+                const x = queue.pop();
+                const idx = (y * width + x) * 4;
+
+                if (x < 0 || x >= width || y < 0 || y >= height) continue;
+                if (visited[y * width + x]) continue;
+
+                visited[y * width + x] = 1;
+
+                if (colorMatch(idx)) {
+                    // Make pixel transparent
+                    data[idx + 3] = 0;
+
+                    // Push neighboring pixels
+                    if (x > 0) queue.push(x - 1, y);
+                    if (x < width - 1) queue.push(x + 1, y);
+                    if (y > 0) queue.push(x, y - 1);
+                    if (y < height - 1) queue.push(x, y + 1);
+                }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function performBrushStroke(x, y) {
+            const radius = state.brushSize / 2;
+            const softness = state.brushSoftness / 100;
+
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+            const origData = state.originalImageData.data;
+            const width = canvas.width;
+            const height = canvas.height;
+
+            const startX = Math.max(0, Math.floor(x - radius));
+            const endX = Math.min(width - 1, Math.ceil(x + radius));
+            const startY = Math.max(0, Math.floor(y - radius));
+            const endY = Math.min(height - 1, Math.ceil(y + radius));
+
+            for (let py = startY; py <= endY; py++) {
+                for (let px = startX; px <= endX; px++) {
+                    const dist = Math.sqrt((px - x) ** 2 + (py - y) ** 2);
+                    if (dist <= radius) {
+                        const idx = (py * width + px) * 4;
+                        
+                        // Softness edge falloff factor
+                        let factor = 1;
+                        if (softness > 0 && dist > radius * (1 - softness)) {
+                            factor = 1 - (dist - radius * (1 - softness)) / (radius * softness);
+                        }
+
+                        if (state.currentTool === 'eraser') {
+                            data[idx + 3] = Math.max(0, data[idx + 3] * (1 - factor));
+                        } else if (state.currentTool === 'restore') {
+                            // Restore original pixel color & alpha
+                            const targetAlpha = origData[idx + 3];
+                            data[idx] = origData[idx];
+                            data[idx + 1] = origData[idx + 1];
+                            data[idx + 2] = origData[idx + 2];
+                            data[idx + 3] = Math.min(targetAlpha, Math.max(data[idx + 3], targetAlpha * factor));
+                        }
+                    }
+                }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        // Auto Keying: Samples corner pixel colors and clears solid outer background
+        autoCleanBgBtn.addEventListener('click', () => {
+            if (!state.imageLoaded) return;
+
+            const corners = [
+                { x: 0, y: 0 },
+                { x: canvas.width - 1, y: 0 },
+                { x: 0, y: canvas.height - 1 },
+                { x: canvas.width - 1, y: canvas.height - 1 }
+            ];
+
+            corners.forEach(corner => {
+                performFloodFillRemove(corner.x, corner.y);
+            });
+
+            saveHistory();
+        });
+
+        // Crop to Content Bounding Box (Essential for TurboWarp / Scratch sprite alignment)
+        cropBoundsBtn.addEventListener('click', () => {
+            if (!state.imageLoaded) return;
+
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+            const width = canvas.width;
+            const height = canvas.height;
+
+            let minX = width, minY = height, maxX = -1, maxY = -1;
+
+            // Find non-transparent pixel boundaries
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const alpha = data[(y * width + x) * 4 + 3];
+                    if (alpha > 0) {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+
+            // Check if canvas is completely empty
+            if (maxX < minX || maxY < minY) {
+                alert('画像全体が透明です。トリミングする対象がありません。');
+                return;
+            }
+
+            const croppedWidth = maxX - minX + 1;
+            const croppedHeight = maxY - minY + 1;
+
+            // Extract cropped pixel data
+            const croppedData = ctx.getImageData(minX, minY, croppedWidth, croppedHeight);
+
+            // Resize canvas to cropped dimension
+            canvas.width = croppedWidth;
+            canvas.height = croppedHeight;
+            ctx.putImageData(croppedData, 0, 0);
+
+            resetZoom();
+            saveHistory();
+        });
+
+        exportBtn.addEventListener('click', () => {
+            if (!state.imageLoaded) return;
+
+            exportPreviewImg.src = canvas.toDataURL('image/png');
+            exportDimensions.textContent = `${canvas.width} x ${canvas.height} px`;
+            exportModal.classList.remove('hidden');
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            exportModal.classList.add('hidden');
+        });
+
+        exportModal.addEventListener('click', (e) => {
+            if (e.target === exportModal) {
+                exportModal.classList.add('hidden');
+            }
+        });
+
+        confirmDownloadBtn.addEventListener('click', () => {
+            const preset = exportSizePreset.value;
+            let exportCanvas = canvas;
+
+            // Handle Scratch Preset Resize options
+            if (preset !== 'original') {
+                const maxDim = parseInt(preset);
+                let targetW = canvas.width;
+                let targetH = canvas.height;
+
+                if (targetW > maxDim || targetH > maxDim) {
+                    if (targetW > targetH) {
+                        targetH = Math.round((targetH * maxDim) / targetW);
+                        targetW = maxDim;
+                    } else {
+                        targetW = Math.round((targetW * maxDim) / targetH);
+                        targetH = maxDim;
+                    }
+
+                    // Scaled canvas
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = targetW;
+                    tempCanvas.height = targetH;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCtx.imageSmoothingEnabled = false; // Pixel art clean scaling
+                    tempCtx.drawImage(canvas, 0, 0, targetW, targetH);
+                    exportCanvas = tempCanvas;
+                }
+            }
+
+            // Trigger Download
+            const link = document.createElement('a');
+            link.download = `turbowarp-sprite-${Date.now()}.png`;
+            link.href = exportCanvas.toDataURL('image/png');
+            link.click();
+
+            exportModal.classList.add('hidden');
+        });
+    </script>
+</body>
+</html>
